@@ -19,70 +19,72 @@ exports.getDecks = async (req, res) => {
     let whereConditions = "";
     let conditions_length = 0;
 
-    if (filter.category && filter.category.trim() !== '') {
+    if (filter.category && filter.category.trim() !== "") {
       let cd_query = "";
       if (filter.category.includes("【")) {
         cd_query = `SELECT conds from deck_categories1 WHERE category1_var = ?`;
-      }else{
+      } else {
         cd_query = `SELECT conds from deck_categories1 WHERE category1_var = ? OR category1_var LIKE '${filter.category}%'`;
       }
-      const [conditions] = await db.query(cd_query,[filter.category])
-      if(conditions && conditions.length > 0){
+      const [conditions] = await db.query(cd_query, [filter.category]);
+      if (conditions && conditions.length > 0) {
         conditions_length = conditions.length;
-        for(let i = 0; i < conditions.length; i++){
-          conds = conditions[i] && conditions[i].conds && conditions[i].conds.length > 0 ? JSON.parse(conditions[i].conds) : [];
+        for (let i = 0; i < conditions.length; i++) {
+          conds =
+            conditions[i] &&
+            conditions[i].conds &&
+            conditions[i].conds.length > 0
+              ? JSON.parse(conditions[i].conds)
+              : [];
           if (conds.length > 0) {
-            conds.forEach((item,index) => {
-                let operator;
-                switch(item.cardCondition) {
-                case "eql": 
-                    operator = "=";
-                    break;
+            conds.forEach((item, index) => {
+              let operator;
+              switch (item.cardCondition) {
+                case "eql":
+                  operator = "=";
+                  break;
                 case "gte":
-                    operator = ">=";
-                    break;
+                  operator = ">=";
+                  break;
                 case "lte":
-                    operator = "<=";
-                    break;
+                  operator = "<=";
+                  break;
                 case "ueq":
-                    operator = "!=";
-                    break;
+                  operator = "!=";
+                  break;
                 default:
-                    operator = "=";
-                    break;
-                }
-                having_cond += ` AND count_val_${index+1} ${operator} ${item.cardNumber}`;
-                select_cond += `SUM(CASE WHEN name_var = '${item.cardName}' THEN c.count_int ELSE 0 END) AS count_val_${index+1}`;
+                  operator = "=";
+                  break;
+              }
+              having_cond += ` AND count_val_${index + 1} ${operator} ${item.cardNumber}`;
+              select_cond += `SUM(CASE WHEN name_var = '${item.cardName}' THEN c.count_int ELSE 0 END) AS count_val_${index + 1}`;
 
-                if(requiredPairsSQL !== '')
-                  requiredPairsSQL += " UNION ALL ";
+              if (requiredPairsSQL !== "") requiredPairsSQL += " UNION ALL ";
 
-                if(whereConditions !== '')
-                  whereConditions += " OR ";
+              if (whereConditions !== "") whereConditions += " OR ";
 
-                // Append SQL for RequiredPairs table
-                requiredPairsSQL += `    SELECT '${item.cardName}' AS name_var, ${item.cardNumber} AS required_count, '${operator}' AS operator`;
-                whereConditions += `    (rp.operator = '${operator}' AND dcc.count_int ${operator} rp.required_count)`;
+              // Append SQL for RequiredPairs table
+              requiredPairsSQL += `    SELECT '${item.cardName}' AS name_var, ${item.cardNumber} AS required_count, '${operator}' AS operator`;
+              whereConditions += `    (rp.operator = '${operator}' AND dcc.count_int ${operator} rp.required_count)`;
             });
-
           }
         }
       }
     }
 
-    if(whereConditions === ""){
+    if (whereConditions === "") {
       whereConditions = "1=1";
-    }else{
+    } else {
       whereConditions = "(" + whereConditions + ")";
     }
 
-    if(filter.cardName){
+    if (filter.cardName) {
       whereConditions += ` AND dcc.name_var LIKE '%${filter.cardName}%'`;
     }
-    if(filter.cardNumMin){
+    if (filter.cardNumMin) {
       whereConditions += ` AND dcc.count_int >= '${filter.cardNumMin}'`;
     }
-    if(filter.cardNumMax){
+    if (filter.cardNumMax) {
       whereConditions += ` AND dcc.count_int <= '${filter.cardNumMax}'`;
     }
 
@@ -96,14 +98,17 @@ exports.getDecks = async (req, res) => {
         if (filter.prefectures.length === 0) {
           isPrefectureFilterEmpty = true; // Empty array means no results
         } else {
-          prefectureList = filter.prefectures.map(p => `'${p}'`).join(',');
+          prefectureList = filter.prefectures.map((p) => `'${p}'`).join(",");
         }
-      } else if (typeof filter.prefectures === 'string') {
+      } else if (typeof filter.prefectures === "string") {
         const trimmed = filter.prefectures.trim();
         if (trimmed.length === 0) {
           isPrefectureFilterEmpty = true; // Empty string means no results
         } else {
-          prefectureList = trimmed.split(',').map(p => `'${p.trim()}'`).join(',');
+          prefectureList = trimmed
+            .split(",")
+            .map((p) => `'${p.trim()}'`)
+            .join(",");
         }
       }
     }
@@ -115,17 +120,17 @@ exports.getDecks = async (req, res) => {
     }
 
     let query;
-    let having_sql = 'HAVING COUNT(DISTINCT dcc.name_var) >= (SELECT COUNT(*) FROM RequiredPairs)';
-    if(conditions_length > 1)
-      having_sql = '';
-      // Query with card filtering conditions
-    if(requiredPairsSQL !== ''){
+    let having_sql =
+      "HAVING COUNT(DISTINCT dcc.name_var) >= (SELECT COUNT(*) FROM RequiredPairs)";
+    if (conditions_length > 1) having_sql = "";
+    // Query with card filtering conditions
+    if (requiredPairsSQL !== "") {
       query = `
         WITH FilteredEvents AS (
             SELECT event_holding_id
             FROM events
             WHERE event_date_date BETWEEN ? AND ?
-            AND event_league_int = ?${prefectureList ? ` AND event_prefecture IN (${prefectureList})` : ''}
+            AND event_league_int = ?${prefectureList ? ` AND event_prefecture IN (${prefectureList})` : ""}
         ),
         FilteredDecks AS (
             SELECT DISTINCT d.deck_ID_var
@@ -166,13 +171,13 @@ exports.getDecks = async (req, res) => {
         GROUP BY d2.deck_ID_var
         ORDER BY d2.rank_int DESC
       `;
-    }else{
+    } else {
       query = `
         WITH FilteredEvents AS (
             SELECT event_holding_id
             FROM events
             WHERE event_date_date BETWEEN ? AND ?
-            AND event_league_int = ?${prefectureList ? ` AND event_prefecture IN (${prefectureList})` : ''}
+            AND event_league_int = ?${prefectureList ? ` AND event_prefecture IN (${prefectureList})` : ""}
         ),
         FilteredDecks AS (
             SELECT DISTINCT d.deck_ID_var
@@ -207,12 +212,16 @@ exports.getDecks = async (req, res) => {
         LEFT JOIN events e ON d2.event_holding_id = e.event_holding_id
         GROUP BY d2.deck_ID_var
         ORDER BY d2.rank_int DESC
-      `;      
+      `;
     }
 
-    const [decks_result] = await db.query(query, [startDate, endDate, filter.league])
+    const [decks_result] = await db.query(query, [
+      startDate,
+      endDate,
+      filter.league,
+    ]);
     console.log("query==>", query);
-    
+
     res.status(200).json(decks_result);
   } catch (err) {
     console.error("Error fetching data:", err);
@@ -238,7 +247,7 @@ exports.getDecksDetails = async (req, res) => {
     const { id } = req.params;
     const query = `SELECT d.event_holding_id, d.deck_ID_var, d.rank_int, d.point_int FROM decks as d WHERE event_holding_id = ${id} ORDER BY point_int DESC, id ASC`;
     const [events_result] = await db.query(query);
-    console.log('events_result==', events_result);
+    console.log("events_result==", events_result);
     res.status(200).json(events_result);
   } catch (err) {
     console.error("Error fetching data:", err);
@@ -247,7 +256,9 @@ exports.getDecksDetails = async (req, res) => {
 };
 
 exports.getDeckStats = async (req, res) => {
-  console.log("🏢 API FROM FRONTEND FOR DECK STATS IS ARRIVED!!!!!!!!!!!!!!! 🏢");
+  console.log(
+    "🏢 API FROM FRONTEND FOR DECK STATS IS ARRIVED!!!!!!!!!!!!!!! 🏢",
+  );
   try {
     const { filter } = req.body;
     console.log("filter==", filter);
@@ -264,70 +275,72 @@ exports.getDeckStats = async (req, res) => {
     let whereConditions = "";
     let conditions_length = 0;
 
-    if (filter.category && filter.category.trim() !== '') {
+    if (filter.category && filter.category.trim() !== "") {
       let cd_query = "";
       if (filter.category.includes("【")) {
         cd_query = `SELECT conds from deck_categories1 WHERE category1_var = ?`;
-      }else{
+      } else {
         cd_query = `SELECT conds from deck_categories1 WHERE category1_var = ? OR category1_var LIKE '${filter.category}%'`;
       }
-      const [conditions] = await db.query(cd_query,[filter.category])
-      if(conditions && conditions.length > 0){
+      const [conditions] = await db.query(cd_query, [filter.category]);
+      if (conditions && conditions.length > 0) {
         conditions_length = conditions.length;
-        for(let i = 0; i < conditions.length; i++){
-          conds = conditions[i] && conditions[i].conds && conditions[i].conds.length > 0 ? JSON.parse(conditions[i].conds) : [];
+        for (let i = 0; i < conditions.length; i++) {
+          conds =
+            conditions[i] &&
+            conditions[i].conds &&
+            conditions[i].conds.length > 0
+              ? JSON.parse(conditions[i].conds)
+              : [];
           if (conds.length > 0) {
-            conds.forEach((item,index) => {
-                let operator;
-                switch(item.cardCondition) {
-                case "eql": 
-                    operator = "=";
-                    break;
+            conds.forEach((item, index) => {
+              let operator;
+              switch (item.cardCondition) {
+                case "eql":
+                  operator = "=";
+                  break;
                 case "gte":
-                    operator = ">=";
-                    break;
+                  operator = ">=";
+                  break;
                 case "lte":
-                    operator = "<=";
-                    break;
+                  operator = "<=";
+                  break;
                 case "ueq":
-                    operator = "!=";
-                    break;
+                  operator = "!=";
+                  break;
                 default:
-                    operator = "=";
-                    break;
-                }
-                having_cond += ` AND count_val_${index+1} ${operator} ${item.cardNumber}`;
-                select_cond += `SUM(CASE WHEN name_var = '${item.cardName}' THEN c.count_int ELSE 0 END) AS count_val_${index+1}`;
+                  operator = "=";
+                  break;
+              }
+              having_cond += ` AND count_val_${index + 1} ${operator} ${item.cardNumber}`;
+              select_cond += `SUM(CASE WHEN name_var = '${item.cardName}' THEN c.count_int ELSE 0 END) AS count_val_${index + 1}`;
 
-                if(requiredPairsSQL !== '')
-                  requiredPairsSQL += " UNION ALL ";
+              if (requiredPairsSQL !== "") requiredPairsSQL += " UNION ALL ";
 
-                if(whereConditions !== '')
-                  whereConditions += " OR ";
+              if (whereConditions !== "") whereConditions += " OR ";
 
-                // Append SQL for RequiredPairs table
-                requiredPairsSQL += `    SELECT '${item.cardName}' AS name_var, ${item.cardNumber} AS required_count, '${operator}' AS operator`;
-                whereConditions += `    (rp.operator = '${operator}' AND dcc.count_int ${operator} rp.required_count)`;
+              // Append SQL for RequiredPairs table
+              requiredPairsSQL += `    SELECT '${item.cardName}' AS name_var, ${item.cardNumber} AS required_count, '${operator}' AS operator`;
+              whereConditions += `    (rp.operator = '${operator}' AND dcc.count_int ${operator} rp.required_count)`;
             });
-
           }
         }
       }
     }
 
-    if(whereConditions === ""){
+    if (whereConditions === "") {
       whereConditions = "1=1";
-    }else{
+    } else {
       whereConditions = "(" + whereConditions + ")";
     }
 
-    if(filter.cardName){
+    if (filter.cardName) {
       whereConditions += ` AND dcc.name_var LIKE '%${filter.cardName}%'`;
     }
-    if(filter.cardNumMin){
+    if (filter.cardNumMin) {
       whereConditions += ` AND dcc.count_int >= '${filter.cardNumMin}'`;
     }
-    if(filter.cardNumMax){
+    if (filter.cardNumMax) {
       whereConditions += ` AND dcc.count_int <= '${filter.cardNumMax}'`;
     }
 
@@ -341,14 +354,17 @@ exports.getDeckStats = async (req, res) => {
         if (filter.prefectures.length === 0) {
           isPrefectureFilterEmpty = true; // Empty array means no results
         } else {
-          prefectureList = filter.prefectures.map(p => `'${p}'`).join(',');
+          prefectureList = filter.prefectures.map((p) => `'${p}'`).join(",");
         }
-      } else if (typeof filter.prefectures === 'string') {
+      } else if (typeof filter.prefectures === "string") {
         const trimmed = filter.prefectures.trim();
         if (trimmed.length === 0) {
           isPrefectureFilterEmpty = true; // Empty string means no results
         } else {
-          prefectureList = trimmed.split(',').map(p => `'${p.trim()}'`).join(',');
+          prefectureList = trimmed
+            .split(",")
+            .map((p) => `'${p.trim()}'`)
+            .join(",");
         }
       }
     }
@@ -358,7 +374,7 @@ exports.getDeckStats = async (req, res) => {
       res.status(200).json({
         eventCount: 0,
         totalDeckCount: 0,
-        filteredDeckCount: 0
+        filteredDeckCount: 0,
       });
       return;
     }
@@ -368,7 +384,7 @@ exports.getDeckStats = async (req, res) => {
       SELECT COUNT(DISTINCT e.event_holding_id) AS event_count
       FROM events e
       WHERE e.event_date_date BETWEEN ? AND ?
-      AND e.event_league_int = ?${prefectureList ? ` AND e.event_prefecture IN (${prefectureList})` : ''}
+      AND e.event_league_int = ?${prefectureList ? ` AND e.event_prefecture IN (${prefectureList})` : ""}
     `;
 
     // Query to get total deck count in events
@@ -377,7 +393,7 @@ exports.getDeckStats = async (req, res) => {
           SELECT event_holding_id
           FROM events
           WHERE event_date_date BETWEEN ? AND ?
-          AND event_league_int = ?${prefectureList ? ` AND event_prefecture IN (${prefectureList})` : ''}
+          AND event_league_int = ?${prefectureList ? ` AND event_prefecture IN (${prefectureList})` : ""}
       )
       SELECT COUNT(DISTINCT d.deck_ID_var) AS total_deck_count
       FROM decks d
@@ -386,24 +402,32 @@ exports.getDeckStats = async (req, res) => {
     `;
 
     // Execute queries in parallel
-    const [eventResult] = await db.query(eventQuery, [startDate, endDate, filter.league]);
-    const [totalDeckResult] = await db.query(totalDeckQuery, [startDate, endDate, filter.league]);
+    const [eventResult] = await db.query(eventQuery, [
+      startDate,
+      endDate,
+      filter.league,
+    ]);
+    const [totalDeckResult] = await db.query(totalDeckQuery, [
+      startDate,
+      endDate,
+      filter.league,
+    ]);
 
     let filteredDeckCount = 0;
-    let extra_msg = '';
+    let extra_msg = "";
 
-  let filteredDeckQuery = '';  
-  let having_sql = 'HAVING COUNT(DISTINCT dcc.name_var) >= (SELECT COUNT(*) FROM RequiredPairs)';
-  if(conditions_length > 1)
-    having_sql = '';
+    let filteredDeckQuery = "";
+    let having_sql =
+      "HAVING COUNT(DISTINCT dcc.name_var) >= (SELECT COUNT(*) FROM RequiredPairs)";
+    if (conditions_length > 1) having_sql = "";
 
-  if(requiredPairsSQL !== ''){
-    filteredDeckQuery = `
+    if (requiredPairsSQL !== "") {
+      filteredDeckQuery = `
       WITH FilteredEvents AS (
           SELECT event_holding_id
           FROM events
           WHERE event_date_date BETWEEN ? AND ?
-          AND event_league_int = ?${prefectureList ? ` AND event_prefecture IN (${prefectureList})` : ''}
+          AND event_league_int = ?${prefectureList ? ` AND event_prefecture IN (${prefectureList})` : ""}
       ),
       FilteredDecks AS (
           SELECT DISTINCT d.deck_ID_var
@@ -439,14 +463,14 @@ exports.getDeckStats = async (req, res) => {
       )
       SELECT COUNT(*) as filtered_deck_count
       FROM FilteredValidDecks
-    `;    
-  }else{
-    filteredDeckQuery = `
+    `;
+    } else {
+      filteredDeckQuery = `
       WITH FilteredEvents AS (
           SELECT event_holding_id
           FROM events
           WHERE event_date_date BETWEEN ? AND ?
-          AND event_league_int = ?${prefectureList ? ` AND event_prefecture IN (${prefectureList})` : ''}
+          AND event_league_int = ?${prefectureList ? ` AND event_prefecture IN (${prefectureList})` : ""}
       ),
       FilteredDecks AS (
           SELECT DISTINCT d.deck_ID_var
@@ -478,9 +502,13 @@ exports.getDeckStats = async (req, res) => {
       SELECT COUNT(*) as filtered_deck_count
       FROM FilteredValidDecks
     `;
-  }
-  
-    const [filteredDeckResult] = await db.query(filteredDeckQuery, [startDate, endDate, filter.league]);
+    }
+
+    const [filteredDeckResult] = await db.query(filteredDeckQuery, [
+      startDate,
+      endDate,
+      filter.league,
+    ]);
     filteredDeckCount = filteredDeckResult[0]?.filtered_deck_count || 0;
     extra_msg = filteredDeckQuery;
 
@@ -488,7 +516,7 @@ exports.getDeckStats = async (req, res) => {
       eventCount: eventResult[0]?.event_count || 0,
       totalDeckCount: totalDeckResult[0]?.total_deck_count || 0,
       filteredDeckCount: filteredDeckCount,
-      extra_msg: extra_msg
+      extra_msg: extra_msg,
     };
 
     console.log("Deck stats==>", stats);
@@ -512,81 +540,54 @@ exports.getDecksTest = async (req, res) => {
 
     // If category is empty string, skip category filtering
     let conds = [];
-    let having_cond = "";
-    let select_cond = "";
     let requiredPairsSQL = "";
-    let whereConditions = "";
     let conditions_length = 0;
 
-    if (filter.category && filter.category.trim() !== '') {
+    if (filter.category && filter.category.trim() !== "") {
       let cd_query = "";
       if (filter.category.includes("【")) {
         cd_query = `SELECT conds from deck_categories1 WHERE category1_var = ?`;
-      }else{
+      } else {
         cd_query = `SELECT conds from deck_categories1 WHERE category1_var = ? OR category1_var LIKE '${filter.category}%'`;
       }
-      const [conditions] = await db.query(cd_query,[filter.category])
-      if(conditions && conditions.length > 0){
+      const [conditions] = await db.query(cd_query, [filter.category]);
+      if (conditions && conditions.length > 0) {
         conditions_length = conditions.length;
-        for(let i = 0; i < conditions.length; i++){
-          conds = conditions[i] && conditions[i].conds && conditions[i].conds.length > 0 ? JSON.parse(conditions[i].conds) : [];
+        for (let i = 0; i < conditions.length; i++) {
+          conds =
+            conditions[i] &&
+            conditions[i].conds &&
+            conditions[i].conds.length > 0
+              ? JSON.parse(conditions[i].conds)
+              : [];
           if (conds.length > 0) {
-            conds.forEach((item,index) => {
-                let operator;
-                switch(item.cardCondition) {
-                case "eql": 
-                    operator = "=";
-                    break;
+            conds.forEach((item, index) => {
+              let operator;
+              switch (item.cardCondition) {
+                case "eql":
+                  operator = "=";
+                  break;
                 case "gte":
-                    operator = ">=";
-                    break;
+                  operator = ">=";
+                  break;
                 case "lte":
-                    operator = "<=";
-                    break;
+                  operator = "<=";
+                  break;
                 case "ueq":
-                    operator = "!=";
-                    break;
+                  operator = "!=";
+                  break;
                 default:
-                    operator = "=";
-                    break;
-                }
-                having_cond += ` AND count_val_${index+1} ${operator} ${item.cardNumber}`;
-                select_cond += `SUM(CASE WHEN name_var = '${item.cardName}' THEN c.count_int ELSE 0 END) AS count_val_${index+1}`;
-
-                if(requiredPairsSQL !== '')
-                  requiredPairsSQL += " UNION ALL ";
-
-                if(whereConditions !== '')
-                  whereConditions += " OR ";
-
-                // Append SQL for RequiredPairs table
-                requiredPairsSQL += `    SELECT '${item.cardName}' AS name_var, ${item.cardNumber} AS required_count, '${operator}' AS operator`;
-                whereConditions += `    (rp.operator = '${operator}' AND dcc.count_int ${operator} rp.required_count)`;
+                  operator = "=";
+                  break;
+              }
+              if (requiredPairsSQL !== "") requiredPairsSQL += " UNION ALL ";
+              requiredPairsSQL += `    SELECT '${item.cardName}' AS name_var, ${item.cardNumber} AS required_count, '${operator}' AS operator`;
             });
-
           }
         }
       }
     }
 
-    if(whereConditions === ""){
-      whereConditions = "1=1";
-    }else{
-      whereConditions = "(" + whereConditions + ")";
-    }
-
-    if(filter.cardName){
-      whereConditions += ` AND dcc.name_var LIKE '%${filter.cardName}%'`;
-    }
-    if(filter.cardNumMin){
-      whereConditions += ` AND dcc.count_int >= '${filter.cardNumMin}'`;
-    }
-    if(filter.cardNumMax){
-      whereConditions += ` AND dcc.count_int <= '${filter.cardNumMax}'`;
-    }
-
-    // Format prefectures with quotes for SQL IN clause
-    // If prefectures is an empty array [], we should return no results
     let prefectureList = null;
     let isPrefectureFilterEmpty = false;
 
@@ -595,14 +596,17 @@ exports.getDecksTest = async (req, res) => {
         if (filter.prefectures.length === 0) {
           isPrefectureFilterEmpty = true; // Empty array means no results
         } else {
-          prefectureList = filter.prefectures.map(p => `'${p}'`).join(',');
+          prefectureList = filter.prefectures.map((p) => `'${p}'`).join(",");
         }
-      } else if (typeof filter.prefectures === 'string') {
+      } else if (typeof filter.prefectures === "string") {
         const trimmed = filter.prefectures.trim();
         if (trimmed.length === 0) {
           isPrefectureFilterEmpty = true; // Empty string means no results
         } else {
-          prefectureList = trimmed.split(',').map(p => `'${p.trim()}'`).join(',');
+          prefectureList = trimmed
+            .split(",")
+            .map((p) => `'${p.trim()}'`)
+            .join(",");
         }
       }
     }
@@ -614,17 +618,17 @@ exports.getDecksTest = async (req, res) => {
     }
 
     let query;
-    let having_sql = 'HAVING COUNT(DISTINCT dcc.name_var) >= (SELECT COUNT(*) FROM RequiredPairs)';
-    if(conditions_length > 1)
-      having_sql = '';
-      // Query with card filtering conditions
-    if(requiredPairsSQL !== ''){
+    let having_sql =
+      "HAVING COUNT(DISTINCT dcc.name_var) >= (SELECT COUNT(*) FROM RequiredPairs)";
+    if (conditions_length > 1) having_sql = "";
+    // Query with card filtering conditions
+    if (requiredPairsSQL !== "") {
       query = `
         WITH FilteredEvents AS (
             SELECT event_holding_id
             FROM events
             WHERE event_date_date BETWEEN ? AND ?
-            AND event_league_int = ?${prefectureList ? ` AND event_prefecture IN (${prefectureList})` : ''}
+            AND event_league_int = ?${prefectureList ? ` AND event_prefecture IN (${prefectureList})` : ""}
         ),
         FilteredDecks AS (
             SELECT DISTINCT d.deck_ID_var
@@ -636,11 +640,7 @@ exports.getDecksTest = async (req, res) => {
             ${requiredPairsSQL}
         ),
         DeckCardCounts AS (
-            SELECT
-                c.deck_ID_var,
-                REPLACE(c.name_var, ' ', '') AS name_var,
-                c.count_int,
-                COUNT(*) AS pair_count
+            SELECT c.deck_ID_var, REPLACE(c.name_var, ' ', '') AS name_var, c.count_int
             FROM cards c
             WHERE EXISTS (
                 SELECT 1
@@ -649,29 +649,50 @@ exports.getDecksTest = async (req, res) => {
             )
             GROUP BY c.deck_ID_var, REPLACE(c.name_var, ' ', ''), c.count_int
         ),
-        FilteredValidDecks AS (
-            SELECT dcc.deck_ID_var as deck_id
-            FROM DeckCardCounts dcc
-            JOIN RequiredPairs rp ON REPLACE(dcc.name_var, ' ', '') = rp.name_var
-            WHERE
-                ${whereConditions}
-            GROUP BY dcc.deck_ID_var
-            ${having_sql}
+        CategoryFiltered AS (
+            SELECT dcc.deck_ID_var FROM DeckCardCounts dcc
+            JOIN RequiredPairs rp ON dcc.name_var = rp.name_var
+            WHERE (rp.operator = '>=' AND dcc.count_int >= rp.required_count)
+               OR (rp.operator = '<=' AND dcc.count_int <= rp.required_count)
+               OR (rp.operator = '=' AND dcc.count_int = rp.required_count)
+               OR (rp.operator = '!=' AND dcc.count_int != rp.required_count)
+            GROUP BY dcc.deck_ID_var ${having_sql}
+        ),
+        FinalFiltered AS (
+            SELECT DISTINCT cf.deck_ID_var FROM CategoryFiltered cf
+            ${
+              filter.cardName || filter.cardNumMin || filter.cardNumMax
+                ? `
+            WHERE EXISTS (
+                SELECT 1 FROM DeckCardCounts dcc2
+                WHERE dcc2.deck_ID_var = cf.deck_ID_var
+                ${filter.cardName ? `AND dcc2.name_var LIKE '%${filter.cardName}%'` : ""}
+                ${filter.cardNumMin ? `AND dcc2.count_int >= ${filter.cardNumMin}` : ""}
+                ${filter.cardNumMax ? `AND dcc2.count_int <= ${filter.cardNumMax}` : ""}
+            )`
+                : ""
+            }
         )
-        SELECT d2.*, e.event_prefecture
-        FROM FilteredValidDecks fvd
-        INNER JOIN decks d2 ON fvd.deck_id = d2.deck_ID_var
+        SELECT d2.*, e.event_prefecture FROM FinalFiltered ff
+        INNER JOIN decks d2 ON ff.deck_ID_var = d2.deck_ID_var
         LEFT JOIN events e ON d2.event_holding_id = e.event_holding_id
-        GROUP BY d2.deck_ID_var
         ORDER BY d2.rank_int DESC
       `;
-    }else{
+    } else {
+      let textWhere = "1=1";
+      if (filter.cardName)
+        textWhere += ` AND dcc.name_var LIKE '%${filter.cardName}%'`;
+      if (filter.cardNumMin)
+        textWhere += ` AND dcc.count_int >= ${filter.cardNumMin}`;
+      if (filter.cardNumMax)
+        textWhere += ` AND dcc.count_int <= ${filter.cardNumMax}`;
+
       query = `
         WITH FilteredEvents AS (
             SELECT event_holding_id
             FROM events
             WHERE event_date_date BETWEEN ? AND ?
-            AND event_league_int = ?${prefectureList ? ` AND event_prefecture IN (${prefectureList})` : ''}
+            AND event_league_int = ?${prefectureList ? ` AND event_prefecture IN (${prefectureList})` : ""}
         ),
         FilteredDecks AS (
             SELECT DISTINCT d.deck_ID_var
@@ -680,11 +701,7 @@ exports.getDecksTest = async (req, res) => {
             WHERE d.rank_int IN (${filter.ranks})
         ),
         DeckCardCounts AS (
-            SELECT
-                c.deck_ID_var,
-                REPLACE(c.name_var, ' ', '') AS name_var,
-                c.count_int,
-                COUNT(*) AS pair_count
+            SELECT c.deck_ID_var, REPLACE(c.name_var, ' ', '') AS name_var, c.count_int
             FROM cards c
             WHERE EXISTS (
                 SELECT 1
@@ -693,26 +710,23 @@ exports.getDecksTest = async (req, res) => {
             )
             GROUP BY c.deck_ID_var, REPLACE(c.name_var, ' ', ''), c.count_int
         ),
-        FilteredValidDecks AS (
-            SELECT dcc.deck_ID_var as deck_id
-            FROM DeckCardCounts dcc
-            WHERE
-                ${whereConditions}
-            GROUP BY dcc.deck_ID_var
+        FinalFiltered AS (
+            SELECT DISTINCT dcc.deck_ID_var FROM DeckCardCounts dcc WHERE ${textWhere}
         )
-        SELECT d2.*, e.event_prefecture
-        FROM FilteredValidDecks fvd
-        INNER JOIN decks d2 ON fvd.deck_id = d2.deck_ID_var
+        SELECT d2.*, e.event_prefecture FROM FinalFiltered ff
+        INNER JOIN decks d2 ON ff.deck_ID_var = d2.deck_ID_var
         LEFT JOIN events e ON d2.event_holding_id = e.event_holding_id
-        GROUP BY d2.deck_ID_var
         ORDER BY d2.rank_int DESC
-      `;      
+      `;
     }
 
-
-    const [decks_result] = await db.query(query, [startDate, endDate, filter.league])
+    const [decks_result] = await db.query(query, [
+      startDate,
+      endDate,
+      filter.league,
+    ]);
     console.log("query==>", query);
-    
+
     res.status(200).json(decks_result);
   } catch (err) {
     console.error("Error fetching data:", err);
@@ -721,7 +735,9 @@ exports.getDecksTest = async (req, res) => {
 };
 
 exports.getDeckStatsTest = async (req, res) => {
-  console.log("🏢 API FROM FRONTEND FOR DECK STATS IS ARRIVED!!!!!!!!!!!!!!! 🏢");
+  console.log(
+    "🏢 API FROM FRONTEND FOR DECK STATS IS ARRIVED!!!!!!!!!!!!!!! 🏢",
+  );
   try {
     const { filter } = req.body;
     console.log("filter==", filter);
@@ -732,81 +748,54 @@ exports.getDeckStatsTest = async (req, res) => {
 
     // If category is empty string, skip category filtering
     let conds = [];
-    let having_cond = "";
-    let select_cond = "";
     let requiredPairsSQL = "";
-    let whereConditions = "";
     let conditions_length = 0;
 
-    if (filter.category && filter.category.trim() !== '') {
+    if (filter.category && filter.category.trim() !== "") {
       let cd_query = "";
       if (filter.category.includes("【")) {
         cd_query = `SELECT conds from deck_categories1 WHERE category1_var = ?`;
-      }else{
+      } else {
         cd_query = `SELECT conds from deck_categories1 WHERE category1_var = ? OR category1_var LIKE '${filter.category}%'`;
       }
-      const [conditions] = await db.query(cd_query,[filter.category])
-      if(conditions && conditions.length > 0){
+      const [conditions] = await db.query(cd_query, [filter.category]);
+      if (conditions && conditions.length > 0) {
         conditions_length = conditions.length;
-        for(let i = 0; i < conditions.length; i++){
-          conds = conditions[i] && conditions[i].conds && conditions[i].conds.length > 0 ? JSON.parse(conditions[i].conds) : [];
+        for (let i = 0; i < conditions.length; i++) {
+          conds =
+            conditions[i] &&
+            conditions[i].conds &&
+            conditions[i].conds.length > 0
+              ? JSON.parse(conditions[i].conds)
+              : [];
           if (conds.length > 0) {
-            conds.forEach((item,index) => {
-                let operator;
-                switch(item.cardCondition) {
-                case "eql": 
-                    operator = "=";
-                    break;
+            conds.forEach((item, index) => {
+              let operator;
+              switch (item.cardCondition) {
+                case "eql":
+                  operator = "=";
+                  break;
                 case "gte":
-                    operator = ">=";
-                    break;
+                  operator = ">=";
+                  break;
                 case "lte":
-                    operator = "<=";
-                    break;
+                  operator = "<=";
+                  break;
                 case "ueq":
-                    operator = "!=";
-                    break;
+                  operator = "!=";
+                  break;
                 default:
-                    operator = "=";
-                    break;
-                }
-                having_cond += ` AND count_val_${index+1} ${operator} ${item.cardNumber}`;
-                select_cond += `SUM(CASE WHEN name_var = '${item.cardName}' THEN c.count_int ELSE 0 END) AS count_val_${index+1}`;
-
-                if(requiredPairsSQL !== '')
-                  requiredPairsSQL += " UNION ALL ";
-
-                if(whereConditions !== '')
-                  whereConditions += " OR ";
-
-                // Append SQL for RequiredPairs table
-                requiredPairsSQL += `    SELECT '${item.cardName}' AS name_var, ${item.cardNumber} AS required_count, '${operator}' AS operator`;
-                whereConditions += `    (rp.operator = '${operator}' AND dcc.count_int ${operator} rp.required_count)`;
+                  operator = "=";
+                  break;
+              }
+              if (requiredPairsSQL !== "") requiredPairsSQL += " UNION ALL ";
+              requiredPairsSQL += `    SELECT '${item.cardName}' AS name_var, ${item.cardNumber} AS required_count, '${operator}' AS operator`;
             });
-
           }
         }
       }
     }
 
-    if(whereConditions === ""){
-      whereConditions = "1=1";
-    }else{
-      whereConditions = "(" + whereConditions + ")";
-    }
-
-    if(filter.cardName){
-      whereConditions += ` AND dcc.name_var LIKE '%${filter.cardName}%'`;
-    }
-    if(filter.cardNumMin){
-      whereConditions += ` AND dcc.count_int >= '${filter.cardNumMin}'`;
-    }
-    if(filter.cardNumMax){
-      whereConditions += ` AND dcc.count_int <= '${filter.cardNumMax}'`;
-    }
-
-    // Format prefectures with quotes for SQL IN clause
-    // If prefectures is an empty array [], we should return no results
     let prefectureList = null;
     let isPrefectureFilterEmpty = false;
 
@@ -815,14 +804,17 @@ exports.getDeckStatsTest = async (req, res) => {
         if (filter.prefectures.length === 0) {
           isPrefectureFilterEmpty = true; // Empty array means no results
         } else {
-          prefectureList = filter.prefectures.map(p => `'${p}'`).join(',');
+          prefectureList = filter.prefectures.map((p) => `'${p}'`).join(",");
         }
-      } else if (typeof filter.prefectures === 'string') {
+      } else if (typeof filter.prefectures === "string") {
         const trimmed = filter.prefectures.trim();
         if (trimmed.length === 0) {
           isPrefectureFilterEmpty = true; // Empty string means no results
         } else {
-          prefectureList = trimmed.split(',').map(p => `'${p.trim()}'`).join(',');
+          prefectureList = trimmed
+            .split(",")
+            .map((p) => `'${p.trim()}'`)
+            .join(",");
         }
       }
     }
@@ -832,7 +824,7 @@ exports.getDeckStatsTest = async (req, res) => {
       res.status(200).json({
         eventCount: 0,
         totalDeckCount: 0,
-        filteredDeckCount: 0
+        filteredDeckCount: 0,
       });
       return;
     }
@@ -842,7 +834,7 @@ exports.getDeckStatsTest = async (req, res) => {
       SELECT COUNT(DISTINCT e.event_holding_id) AS event_count
       FROM events e
       WHERE e.event_date_date BETWEEN ? AND ?
-      AND e.event_league_int = ?${prefectureList ? ` AND e.event_prefecture IN (${prefectureList})` : ''}
+      AND e.event_league_int = ?${prefectureList ? ` AND e.event_prefecture IN (${prefectureList})` : ""}
     `;
 
     // Query to get total deck count in events
@@ -851,7 +843,7 @@ exports.getDeckStatsTest = async (req, res) => {
           SELECT event_holding_id
           FROM events
           WHERE event_date_date BETWEEN ? AND ?
-          AND event_league_int = ?${prefectureList ? ` AND event_prefecture IN (${prefectureList})` : ''}
+          AND event_league_int = ?${prefectureList ? ` AND event_prefecture IN (${prefectureList})` : ""}
       )
       SELECT COUNT(DISTINCT d.deck_ID_var) AS total_deck_count
       FROM decks d
@@ -860,101 +852,122 @@ exports.getDeckStatsTest = async (req, res) => {
     `;
 
     // Execute queries in parallel
-    const [eventResult] = await db.query(eventQuery, [startDate, endDate, filter.league]);
-    const [totalDeckResult] = await db.query(totalDeckQuery, [startDate, endDate, filter.league]);
+    const [eventResult] = await db.query(eventQuery, [
+      startDate,
+      endDate,
+      filter.league,
+    ]);
+    const [totalDeckResult] = await db.query(totalDeckQuery, [
+      startDate,
+      endDate,
+      filter.league,
+    ]);
 
     let filteredDeckCount = 0;
-    let extra_msg = '';
+    let extra_msg = "";
 
-  let filteredDeckQuery = '';  
-  let having_sql = 'HAVING COUNT(DISTINCT dcc.name_var) >= (SELECT COUNT(*) FROM RequiredPairs)';
-  if(conditions_length > 1)
-    having_sql = '';
+    let filteredDeckQuery = "";
+    let having_sql =
+      "HAVING COUNT(DISTINCT dcc.name_var) >= (SELECT COUNT(*) FROM RequiredPairs)";
+    if (conditions_length > 1) having_sql = "";
 
-  if(requiredPairsSQL !== ''){
-    filteredDeckQuery = `
-      WITH FilteredEvents AS (
+    if (requiredPairsSQL !== "") {
+      filteredDeckQuery = `
+        WITH FilteredEvents AS (
           SELECT event_holding_id
           FROM events
           WHERE event_date_date BETWEEN ? AND ?
-          AND event_league_int = ?${prefectureList ? ` AND event_prefecture IN (${prefectureList})` : ''}
-      ),
-      FilteredDecks AS (
+          AND event_league_int = ?${prefectureList ? ` AND event_prefecture IN (${prefectureList})` : ""}
+        ),
+        FilteredDecks AS (
           SELECT DISTINCT d.deck_ID_var
           FROM decks d
-          JOIN FilteredEvents fe ON d.event_holding_id = fe.event_holding_id
-          WHERE d.rank_int IN (${filter.ranks})
-      ),
+            JOIN FilteredEvents fe ON d.event_holding_id = fe.event_holding_id
+            WHERE d.rank_int IN (${filter.ranks})
+        ),
       RequiredPairs AS (
           ${requiredPairsSQL}
       ),
-      DeckCardCounts AS (
-          SELECT
-              c.deck_ID_var,
-              REPLACE(c.name_var, ' ', '') AS name_var,
-              c.count_int,
-              COUNT(*) AS pair_count
-          FROM cards c
+        DeckCardCounts AS (
+            SELECT c.deck_ID_var, REPLACE(c.name_var, ' ', '') AS name_var, c.count_int
+            FROM cards c
           WHERE EXISTS (
               SELECT 1
               FROM FilteredDecks fd
               WHERE c.deck_ID_var = fd.deck_ID_var
           )
-          GROUP BY c.deck_ID_var, REPLACE(c.name_var, ' ', ''), c.count_int
-      ),
-      FilteredValidDecks AS (
-          SELECT dcc.deck_ID_var as deck_id
-          FROM DeckCardCounts dcc
-          JOIN RequiredPairs rp ON REPLACE(dcc.name_var, ' ', '') = rp.name_var
-          WHERE
-              ${whereConditions}
-          GROUP BY dcc.deck_ID_var
-          ${having_sql}
-      )
-      SELECT COUNT(*) as filtered_deck_count
-      FROM FilteredValidDecks
-    `;    
-  }else{
-    filteredDeckQuery = `
-      WITH FilteredEvents AS (
+            GROUP BY c.deck_ID_var, REPLACE(c.name_var, ' ', ''), c.count_int
+        ),
+        CategoryFiltered AS (
+            SELECT dcc.deck_ID_var FROM DeckCardCounts dcc
+            JOIN RequiredPairs rp ON dcc.name_var = rp.name_var
+            WHERE (rp.operator = '>=' AND dcc.count_int >= rp.required_count)
+               OR (rp.operator = '<=' AND dcc.count_int <= rp.required_count)
+               OR (rp.operator = '=' AND dcc.count_int = rp.required_count)
+               OR (rp.operator = '!=' AND dcc.count_int != rp.required_count)
+            GROUP BY dcc.deck_ID_var ${having_sql}
+        ),
+        FinalFiltered AS (
+            SELECT DISTINCT cf.deck_ID_var FROM CategoryFiltered cf
+            ${
+              filter.cardName || filter.cardNumMin || filter.cardNumMax
+                ? `
+            WHERE EXISTS (
+                SELECT 1 FROM DeckCardCounts dcc2
+                WHERE dcc2.deck_ID_var = cf.deck_ID_var
+                ${filter.cardName ? `AND dcc2.name_var LIKE '%${filter.cardName}%'` : ""}
+                ${filter.cardNumMin ? `AND dcc2.count_int >= ${filter.cardNumMin}` : ""}
+                ${filter.cardNumMax ? `AND dcc2.count_int <= ${filter.cardNumMax}` : ""}
+            )`
+                : ""
+            }
+        )
+        SELECT COUNT(*) as filtered_deck_count FROM FinalFiltered
+      `;
+    } else {
+      let textWhere = "1=1";
+      if (filter.cardName)
+        textWhere += ` AND dcc.name_var LIKE '%${filter.cardName}%'`;
+      if (filter.cardNumMin)
+        textWhere += ` AND dcc.count_int >= ${filter.cardNumMin}`;
+      if (filter.cardNumMax)
+        textWhere += ` AND dcc.count_int <= ${filter.cardNumMax}`;
+
+      filteredDeckQuery = `
+        WITH FilteredEvents AS (
           SELECT event_holding_id
           FROM events
           WHERE event_date_date BETWEEN ? AND ?
-          AND event_league_int = ?${prefectureList ? ` AND event_prefecture IN (${prefectureList})` : ''}
-      ),
-      FilteredDecks AS (
+          AND event_league_int = ?${prefectureList ? ` AND event_prefecture IN (${prefectureList})` : ""}
+        ),
+        FilteredDecks AS (
           SELECT DISTINCT d.deck_ID_var
           FROM decks d
-          JOIN FilteredEvents fe ON d.event_holding_id = fe.event_holding_id
-          WHERE d.rank_int IN (${filter.ranks})
-      ),
-      DeckCardCounts AS (
-          SELECT
-              c.deck_ID_var,
-              REPLACE(c.name_var, ' ', '') AS name_var,
-              c.count_int,
-              COUNT(*) AS pair_count
-          FROM cards c
+            JOIN FilteredEvents fe ON d.event_holding_id = fe.event_holding_id
+            WHERE d.rank_int IN (${filter.ranks})
+        ),
+        DeckCardCounts AS (
+            SELECT c.deck_ID_var, REPLACE(c.name_var, ' ', '') AS name_var, c.count_int
+            FROM cards c
           WHERE EXISTS (
               SELECT 1
               FROM FilteredDecks fd
               WHERE c.deck_ID_var = fd.deck_ID_var
           )
-          GROUP BY c.deck_ID_var, REPLACE(c.name_var, ' ', ''), c.count_int
-      ),
-      FilteredValidDecks AS (
-          SELECT dcc.deck_ID_var as deck_id
-          FROM DeckCardCounts dcc
-          WHERE
-              ${whereConditions}
-          GROUP BY dcc.deck_ID_var
-      )
-      SELECT COUNT(*) as filtered_deck_count
-      FROM FilteredValidDecks
-    `;
-  }
+            GROUP BY c.deck_ID_var, REPLACE(c.name_var, ' ', ''), c.count_int
+        ),
+        FinalFiltered AS (
+            SELECT DISTINCT dcc.deck_ID_var FROM DeckCardCounts dcc WHERE ${textWhere}
+        )
+        SELECT COUNT(*) as filtered_deck_count FROM FinalFiltered
+      `;
+    }
 
-    const [filteredDeckResult] = await db.query(filteredDeckQuery, [startDate, endDate, filter.league]);
+    const [filteredDeckResult] = await db.query(filteredDeckQuery, [
+      startDate,
+      endDate,
+      filter.league,
+    ]);
     filteredDeckCount = filteredDeckResult[0]?.filtered_deck_count || 0;
     extra_msg = filteredDeckQuery;
 
@@ -962,7 +975,7 @@ exports.getDeckStatsTest = async (req, res) => {
       eventCount: eventResult[0]?.event_count || 0,
       totalDeckCount: totalDeckResult[0]?.total_deck_count || 0,
       filteredDeckCount: filteredDeckCount,
-      extra_msg: extra_msg
+      extra_msg: extra_msg,
     };
 
     console.log("Deck stats==>", stats);
