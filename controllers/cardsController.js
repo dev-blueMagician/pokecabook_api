@@ -1,4 +1,5 @@
 const db = require("../config/db");
+const db_test = require("../config/db_test");
 
 exports.getCards = async (req, res) => {
   console.log("⛳ API FROM FRONTEND IS ARRIVED!@@@@@@@@@@@@@@@@@ ⛳");
@@ -218,6 +219,18 @@ exports.getCards = async (req, res) => {
         RelatedDecks AS (
             SELECT DISTINCT fvd.deck_ID_var FROM FilteredValidDecks  fvd LEFT JOIN decks d on fvd.deck_ID_var = d.deck_ID_var WHERE d.rank_int IN (${ranks})
         ),
+        ExcludedDecks AS (
+            SELECT DISTINCT c.deck_ID_var
+            FROM cards c
+            JOIN RequiredPairs rp ON REPLACE(c.name_var, ' ', '') = rp.name_var
+            WHERE c.deck_ID_var IN (SELECT deck_ID_var FROM RelatedDecks)
+            AND rp.operator = '>='
+            AND c.count_int < rp.required_count
+        ),
+        FinalRelatedDecks AS (
+            SELECT deck_ID_var FROM RelatedDecks
+            WHERE deck_ID_var NOT IN (SELECT deck_ID_var FROM ExcludedDecks)
+        ),
         AllRelatedCards AS (
             SELECT
                 c.deck_ID_var,
@@ -231,7 +244,7 @@ exports.getCards = async (req, res) => {
                 END AS name_var,
                 c.count_int
             FROM cards c
-            INNER JOIN RelatedDecks rd ON c.deck_ID_var = rd.deck_ID_var
+            INNER JOIN FinalRelatedDecks rd ON c.deck_ID_var = rd.deck_ID_var
             GROUP BY c.deck_ID_var, c.category_int, name_var
         ),
         CardCountsByDeck AS (
@@ -515,7 +528,7 @@ exports.getCardsTest = async (req, res) => {
       const cd_query = `
           SELECT conds from deck_categories1 WHERE category1_var = ?
       `;
-      const [conditions] = await db.query(cd_query, [category]);
+      const [conditions] = await db_test.query(cd_query, [category]);
       console.log("****conditions", conditions[0]);
       conds =
         conditions[0] && conditions[0].conds && conditions[0].conds.length > 0
@@ -650,6 +663,18 @@ exports.getCardsTest = async (req, res) => {
         RelatedDecks AS (
             SELECT DISTINCT fvd.deck_ID_var FROM FilteredValidDecks  fvd LEFT JOIN decks d on fvd.deck_ID_var = d.deck_ID_var WHERE d.rank_int IN (${ranks})
         ),
+        ExcludedDecks AS (
+            SELECT DISTINCT c.deck_ID_var
+            FROM cards c
+            JOIN RequiredPairs rp ON REPLACE(c.name_var, ' ', '') = rp.name_var
+            WHERE c.deck_ID_var IN (SELECT deck_ID_var FROM RelatedDecks)
+            AND rp.operator = '>='
+            AND c.count_int < rp.required_count
+        ),
+        FinalRelatedDecks AS (
+            SELECT deck_ID_var FROM RelatedDecks
+            WHERE deck_ID_var NOT IN (SELECT deck_ID_var FROM ExcludedDecks)
+        ),
         AllRelatedCards AS (
             SELECT
                 c.deck_ID_var,
@@ -663,7 +688,7 @@ exports.getCardsTest = async (req, res) => {
                 END AS name_var,
                 c.count_int
             FROM cards c
-            INNER JOIN RelatedDecks rd ON c.deck_ID_var = rd.deck_ID_var
+            INNER JOIN FinalRelatedDecks rd ON c.deck_ID_var = rd.deck_ID_var
             GROUP BY c.deck_ID_var, c.category_int, name_var
         ),
         CardCountsByDeck AS (
@@ -762,7 +787,7 @@ exports.getCardsTest = async (req, res) => {
     }
 
     console.log("search query=>", query);
-    const [rows] = await db.query(query, [startDate, endDate, league]);
+    const [rows] = await db_test.query(query, [startDate, endDate, league]);
 
     const events_count_query = `
                 SELECT COUNT(*) AS total_events_count
@@ -770,7 +795,7 @@ exports.getCardsTest = async (req, res) => {
                 WHERE event_date_date BETWEEN ? AND ? AND event_league_int = ?${prefectureList ? ` AND event_prefecture IN (${prefectureList})` : ""};
             `;
 
-    const events_count = await db.query(events_count_query, [
+    const events_count = await db_test.query(events_count_query, [
       startDate,
       endDate,
       league,
@@ -785,7 +810,7 @@ exports.getCardsTest = async (req, res) => {
                 WHERE events.event_date_date BETWEEN ? AND ? AND decks.rank_int IN (${ranks}) AND events.event_league_int = ${league}${prefectureList ? ` AND events.event_prefecture IN (${prefectureList})` : ""};
             `;
 
-    const [decks_count] = await db.query(decks_count_query, [
+    const [decks_count] = await db_test.query(decks_count_query, [
       startDate,
       endDate,
     ]);
@@ -839,7 +864,7 @@ exports.getCardsTest = async (req, res) => {
                   SELECT COUNT(*) AS specific_count FROM FilteredValidDecks
               `;
 
-      const [specific_decks_count] = await db.query(
+      const [specific_decks_count] = await db_test.query(
         specific_decks_count_query,
         [startDate, endDate, league],
       );
